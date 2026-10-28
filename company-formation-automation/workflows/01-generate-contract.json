@@ -1,0 +1,1541 @@
+{
+  "name": "01-generate-contract",
+  "nodes": [
+    {
+      "name": "Sticky Note 855c3880",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {
+        "content": "## Abertura de empresas — gerar contrato\n\nA cada 10 min lê as respostas novas do Google Form \"Abertura de Empresas\" (ou roda no botão de teste com dados FICTÍCIOS — cenário no nó Config).\n\n1. Confere os dados (CPF, CEP, % dos sócios, capital, pró-labore do administrador...). Se tiver erro, não cria nada e avisa o que corrigir.\n2. Cria a pasta \"A CONSTITUIR - NOME\" no Drive dos clientes, copiando a estrutura da \"1 PASTA MODELO\" (não cria de novo se já existir).\n3. Gera o contrato no modelo certo (Unipessoal / Limitada) em Documentos Legais/Abertura.\n4. Registra na tabela \"Abertura de Empresas - respostas processadas\" e avisa a Redacted no Google Chat (destino no nó Config).\n\nPara desfazer um caso: apagar a pasta criada.",
+        "color": 4,
+        "width": 640,
+        "height": 340
+      }
+    },
+    {
+      "name": "Teste manual (dados ficticios)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        160,
+        450
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "driveId",
+              "value": "0AArmKcmbuXORUk9PVA",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "modeloPastaId",
+              "value": "<ID>",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "modelosContratoPastaId",
+              "value": "<ID>",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "cenario_teste",
+              "value": "FORM",
+              "type": "string"
+            },
+            {
+              "id": "c5",
+              "name": "formId",
+              "value": "<ID>",
+              "type": "string"
+            },
+            {
+              "id": "c6",
+              "name": "respostas_a_partir_de",
+              "value": "2026-10-16T13:00:00Z",
+              "type": "string"
+            },
+            {
+              "id": "c7",
+              "name": "chat_destino",
+              "value": "spaces/<SPACE_ID>",
+              "type": "string"
+            },
+            {
+              "id": "c8",
+              "name": "chat_destino_obs",
+              "value": "PRODUCAO = conversa direta Redacted Contabilidade <-> Redacted Legalização (spaces/<SPACE_ID>). Para testar sem incomodar a Redacted, trocar para spaces/<SPACE_ID> (Redacted).",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Dados da abertura (TESTE ficticio)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// DADOS FICTÍCIOS para o teste manual. Cenário escolhido no nó Config (cenario_teste): LTDA | SLU | RUIM | FORM\n// FORM = imita uma resposta real do Google Form (mesmo formato da API), para testar a conversão.\nconst end = (rua, n, bairro, cidade, cep, comp) => ({ logradouro: rua, numero: n, complemento: comp || '', bairro, cidade, uf: 'SP', cep });\nconst t = (x) => ({ textAnswers: { answers: [{ value: x }] } });\nconst cenario = $('Config').first().json.cenario_teste || 'LTDA';\nconst C = {\n  LTDA: {\n    nome_pasta: 'TESTE ROBO - NAO USAR',\n    tipo: 'LTDA', razao_social: 'Exemplo Comercio Online Ltda', capital: '21000', integralizacao: 'Dinheiro',\n    objeto_social: 'COMERCIO VAREJISTA DE ARTIGOS DO VESTUARIO PELA INTERNET (TEXTO DE EXEMPLO)',\n    sede: end('Rua Modelo', '23', 'Centro', 'Sao Vicente', '11310000'),\n    socios: [\n      { nome: 'Joao Exemplo Pereira', genero: 'Masculino', nacionalidade: 'brasileiro', estado_civil: 'Casado(a)', regime_bens: 'comunhao parcial de bens', nascimento: '12/04/1990', profissao: 'Empresario', rg: '22.222.222-2', rg_orgao: 'SSP', rg_uf: 'SP', cpf: '11144477735', endereco: end('Alameda Teste', '160', 'Itarare', 'Sao Vicente', '11320000'), percentual: '50', administrador: 'Sim', pro_labore: 'Sim' },\n      { nome: 'Ana Exemplo Souza', genero: 'Feminino', nacionalidade: 'brasileira', estado_civil: 'Solteiro(a)', nascimento: '29/07/1995', profissao: 'Medica', conselho: 'CRM/SP 654321', rg: '33.333.333-3', rg_orgao: 'SSP', rg_uf: 'SP', cpf: '39053344705', endereco: end('Rua Exemplo Dois', '8', 'Gonzaga', 'Redacted', '11060001'), percentual: '50', administrador: 'Sim', pro_labore: 'Sim' },\n    ],\n  },\n  SLU: {\n    nome_pasta: 'TESTE ROBO SLU - NAO USAR',\n    tipo: 'SLU', razao_social: 'Exemplo Consultoria em Saude Ltda', capital: '5000', integralizacao: 'Dinheiro',\n    objeto_social: 'ATIVIDADE MEDICA AMBULATORIAL RESTRITA A CONSULTAS (TEXTO DE EXEMPLO)',\n    sede: end('Avenida Exemplo', '1000', 'Boqueirao', 'Praia Grande', '11700100', 'Sala 12'),\n    socios: [\n      { nome: 'Maria Ficticia Lima', genero: 'Feminino', nacionalidade: 'brasileira', estado_civil: 'Divorciado(a)', nascimento: '03/02/1985', profissao: 'Medica', conselho: 'CRM/SP 123456', rg: '44.444.444-4', rg_orgao: 'SSP', rg_uf: 'SP', cpf: '00000000000', endereco: end('Rua Teste Tres', '45', 'Guilhermina', 'Praia Grande', '11701000', 'Apto 31'), administrador: 'Sim', pro_labore: 'Sim' },\n    ],\n  },\n  RUIM: { // parecido com respostas reais do formulário antigo\n    nome_pasta: 'TESTE ROBO RUIM - NAO USAR',\n    tipo: 'LTDA', razao_social: '', capital: '10.0000', integralizacao: 'Dinheiro', objeto_social: '',\n    sede: end('a casa dele', '', '', 'Redacted', '1106'),\n    socios: [\n      { nome: 'Fulano Teste', genero: '', nacionalidade: 'brasileiro', estado_civil: 'Casado', nascimento: '', profissao: '', rg: 'Mandar pelo whats', rg_orgao: '', rg_uf: '', cpf: '12345678900', endereco: end('Mesmos dados anteriores', '', '', '', ''), percentual: '60', administrador: 'Nao', pro_labore: 'Sim' },\n      { nome: 'Fulano Teste', genero: 'Masculino', nacionalidade: 'brasileiro', estado_civil: 'Solteiro', nascimento: '01/01/2015', profissao: 'Estudante', rg: '1', rg_orgao: 'SSP', rg_uf: 'SP', cpf: '12345678900', endereco: end('Rua X', '1', 'Centro', 'Redacted', '11010000'), percentual: '60', administrador: 'Nao', pro_labore: 'Nao' },\n    ],\n  },\n  FORM: { // resposta no formato da API do Google Forms (códigos das perguntas reais)\n    resposta_id: 'TESTE-FORM', enviada_em: new Date().toISOString(), nome_pasta: 'TESTE ROBO FORM - NAO USAR',\n    answers: {\n      '447da805': t('Sociedade Limitada (2 ou mais sócios)'), '6cd2d53c': t('Exemplo Formulario Servicos Ltda'),\n      '3d67d972': t('Rua do Formulario'), '2832979d': t('77'), '08dc3921': t('Sala 3'), '2e7eeb8a': t('Embaré'), '15e25a1d': t('Redacted'), '70d7e2ec': t('11040000'),\n      '6d418f4c': t('30000'), '6e62bf22': t('Moeda corrente'), '60b2bc0c': t('Consultoria em gestão empresarial (texto de exemplo)'),\n      // sócia 1\n      '58b7f00d': t('Carla Teste Formulario'), '01a95af8': t('Feminino'), '4cb94ea3': t('brasileira'), '4525cd76': t('1988-09-15'), '2c08ead7': t('Casado(a)'), '66209d0d': t('Comunhão parcial de bens'),\n      '76e77b9a': t('Administradora'), '7d75efbd': t('55.555.555-5'), '6f74ad36': t('SSP'), '7a2c599b': t('SP'), '1520aeb5': t('00000000000'),\n      '41548d88': t('Rua Exemplo Quatro'), '138ea2a9': t('10'), '56416b09': t('Ponta da Praia'), '5838a9fa': t('Redacted/SP'), '7ef5a9df': t('11030000'),\n      '4f10b735': t('60'), '34a515e3': t('Sim'), '7a476071': t('Sim'), '705e4faa': t('Sim'),\n      // sócio 2\n      '39baf566': t('Pedro Teste Formulario'), '10f46026': t('Masculino'), '63025b26': t('brasileiro'), '3fa927e7': t('1992-01-20'), '14cd1237': t('Solteiro(a)'),\n      '4a25278e': t('Analista'), '2033da68': t('66.666.666-6'), '35debe33': t('SSP'), '537d7f44': t('SP'), '0c56b27d': t('11144477735'),\n      '6086d606': t('Avenida Teste Cinco'), '24bd2fdc': t('500'), '067d3ec3': t('Centro'), '190c4d97': t('São Vicente'), '27fa24ba': t('11310100'),\n      '4e94dcf6': t('40'), '5c35732c': t('Não'), '1165e7b0': t('Não'), '22c18ce4': t('Não'),\n    },\n  },\n};\nif (!C[cenario]) throw new Error('cenario_teste inválido no Config: ' + cenario + ' (use LTDA, SLU, RUIM ou FORM)');\nreturn [{ json: C[cenario] }];"
+      }
+    },
+    {
+      "name": "Conferir dados e montar campos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ---------- Números por extenso (pt-BR) ----------\nconst UN = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];\nconst DZ = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];\nconst CT = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];\nfunction ate999(n, fem) {\n  if (n === 100) return 'cem';\n  const c = Math.floor(n / 100), r = n % 100, p = [];\n  if (c) p.push(fem && c > 1 ? CT[c].replace(/os$/, 'as') : CT[c]);\n  if (r) {\n    let s = r < 20 ? UN[r] : DZ[Math.floor(r / 10)] + (r % 10 ? ' e ' + UN[r % 10] : '');\n    if (fem) s = s.replace(/\\bum$/, 'uma').replace(/\\bdois$/, 'duas');\n    p.push(s);\n  }\n  return p.join(' e ');\n}\nfunction extenso(n, fem) {\n  if (!Number.isInteger(n) || n < 0 || n > 999999999) throw new Error('Número fora do limite: ' + n);\n  if (n === 0) return 'zero';\n  const mi = Math.floor(n / 1e6), mil = Math.floor((n % 1e6) / 1000), resto = n % 1000, g = [];\n  if (mi) g.push(mi === 1 ? 'um milhão' : ate999(mi, false) + ' milhões');\n  if (mil) g.push(mil === 1 ? 'mil' : ate999(mil, fem) + ' mil');\n  if (resto) g.push(ate999(resto, fem));\n  if (g.length === 1) return g[0];\n  const ult = g.pop();\n  const comE = resto ? (resto < 100 || resto % 100 === 0) : (mil < 100 || mil % 100 === 0);\n  return g.join(' ') + (comE ? ' e ' : ' ') + ult;\n}\nfunction reaisExtenso(n) { const s = extenso(n, false); return s + (n === 1 ? ' real' : (n % 1e6 === 0 ? ' de reais' : ' reais')); }\n\n// ---------- Formatação ----------\nconst UF_NOME = { AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins' };\nconst MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];\nconst so = (s) => String(s == null ? '' : s).replace(/\\D/g, '');\nconst milhar = (n) => String(n).replace(/\\B(?=(\\d{3})+(?!\\d))/g, '.');\nconst dinheiro = (n) => milhar(n) + ',00';\nconst fmtCPF = (c) => c.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');\nconst fmtCEP = (c) => c.replace(/(\\d{5})(\\d{3})/, '$1-$2');\nconst txt = (s) => String(s == null ? '' : s).trim().replace(/\\s+/g, ' ');\nconst vazio = (s) => !txt(s);\nfunction tituloNome(nome) { return txt(nome).toLowerCase().split(' ').map((w, i) => (i > 0 && /^(da|de|do|das|dos|e)$/.test(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' '); }\nfunction cpfValido(c) {\n  if (!/^\\d{11}$/.test(c) || /^(\\d)\\1{10}$/.test(c)) return false;\n  for (const t of [9, 10]) { let s = 0; for (let i = 0; i < t; i++) s += +c[i] * (t + 1 - i); if (((s * 10) % 11) % 10 !== +c[t]) return false; }\n  return true;\n}\n// Capital: aceita 21000 | 21.000 | 21.000,00 | 21000,00 | R$ 21.000,00. Qualquer outra forma (10.0000, 1,5, -) = inválido.\nfunction lerCapital(v) {\n  let s = txt(v).replace(/^R\\$\\s*/i, '').replace(/\\s/g, '').replace(/,00$/, '');\n  if (/^\\d+$/.test(s)) return Number(s);\n  if (/^\\d{1,3}(\\.\\d{3})+$/.test(s)) return Number(s.replace(/\\./g, ''));\n  return NaN;\n}\n// RG: precisa ter pelo menos 5 dígitos e não pode ser frase (ex.: 'Mandar pelo whats')\nfunction rgValido(rg) { const r = txt(rg); return so(r).length >= 5 && !/[a-wyz]{2,}/i.test(r); }\nfunction dataBR(d) { // aceita AAAA-MM-DD ou DD/MM/AAAA\n  const s = txt(d); let m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/); if (m) return { d: +m[3], m: +m[2], a: +m[1] };\n  m = s.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/); if (m) return { d: +m[1], m: +m[2], a: +m[3] };\n  return null;\n}\nconst dd = (n) => String(n).padStart(2, '0');\nfunction idade(nasc, hoje) { let i = hoje.a - nasc.a; if (hoje.m < nasc.m || (hoje.m === nasc.m && hoje.d < nasc.d)) i--; return i; }\n\n// ---------- Palavras por gênero ----------\nfunction g(fem, f, m) { return fem ? f : m; }\nfunction estadoCivil(s, fem) {\n  const e = txt(s.estado_civil).toLowerCase(), rb = txt(s.regime_bens).toLowerCase();\n  const regime = rb ? ' sob o regime de ' + rb : '';\n  if (e.startsWith('solteir')) return g(fem, 'solteira', 'solteiro');\n  if (e.startsWith('casad')) return g(fem, 'casada', 'casado') + regime;\n  if (e.startsWith('divorciad')) return g(fem, 'divorciada', 'divorciado');\n  if (e.startsWith('viúv') || e.startsWith('viuv')) return g(fem, 'viúva', 'viúvo');\n  if (e.startsWith('união') || e.startsWith('uniao')) return 'convivente em união estável' + regime;\n  if (e.startsWith('separad')) return g(fem, 'separada judicialmente', 'separado judicialmente');\n  return null;\n}\nfunction endereco(e) {\n  const comp = txt(e.complemento) ? ' – ' + txt(e.complemento) : '';\n  return `${txt(e.logradouro)}, nº ${txt(e.numero)}${comp} – Bairro ${txt(e.bairro)}`;\n}\n\n// ---------- Conferência + montagem ----------\nfunction montar(d, hoje) {\n  const erros = [], avisos = [];\n  const tipo = d.tipo; // 'SLU' | 'LTDA' | 'EI'\n  const socios = d.socios || [];\n  if (tipo === 'EI') return { erros: ['Empresário Individual: não tem contrato (o VRE gera o documento).'], avisos, tipo };\n  if (!['SLU', 'LTDA'].includes(tipo)) erros.push('Natureza jurídica não definida — Redacted precisa escolher (Unipessoal ou Limitada).');\n  if (tipo === 'SLU' && socios.length !== 1) erros.push(`Unipessoal precisa de exatamente 1 sócio (vieram ${socios.length}).`);\n  if (tipo === 'LTDA' && socios.length < 2) erros.push(`Limitada precisa de 2 ou mais sócios (vieram ${socios.length}).`);\n  if (vazio(d.razao_social)) erros.push('Nome da empresa (razão social) em branco.');\n  if (d.integralizacao && /bens/i.test(d.integralizacao)) erros.push('Integralização em bens: contrato deve ser feito manualmente (modelo prevê só dinheiro).');\n  let capital = lerCapital(d.capital);\n  if (!(capital > 0)) { erros.push(`Capital social inválido (\"${txt(d.capital)}\") — escrever só o valor em reais, ex.: 10000 ou 10.000,00.`); capital = 0; }\n  else if (capital < 100) { erros.push(`Capital social muito baixo (R$ ${dinheiro(capital)}) — confirmar com o cliente.`); }\n  if (vazio(d.objeto_social)) erros.push('Objeto social em branco (Redacted define a partir das atividades).');\n  const sede = d.sede || {};\n  for (const k of ['logradouro', 'numero', 'bairro', 'cidade']) if (vazio(sede[k])) erros.push(`Endereço da empresa: falta ${k}.`);\n  const cepSede = so(sede.cep); if (cepSede.length !== 8) erros.push(`CEP da empresa inválido (\"${txt(sede.cep)}\").`);\n  const ufSede = txt(sede.uf).toUpperCase(); if (!UF_NOME[ufSede]) erros.push(`Estado (UF) da empresa inválido (\"${txt(sede.uf)}\").`);\n\n  // sócios\n  const cpfs = new Set(); let somaPct = 0;\n  const S = socios.map((s, i) => {\n    const rot = `Sócio ${i + 1} (${txt(s.nome) || 'sem nome'})`;\n    const fem = /^f/i.test(txt(s.genero)); if (!/^(f|m)/i.test(txt(s.genero))) erros.push(`${rot}: gênero não informado.`);\n    for (const [k, nome] of [['nome', 'nome'], ['nacionalidade', 'nacionalidade'], ['profissao', 'profissão'], ['rg', 'RG'], ['rg_orgao', 'órgão emissor do RG'], ['rg_uf', 'UF do RG']]) if (vazio(s[k])) erros.push(`${rot}: falta ${nome}.`);\n    if (!vazio(s.rg) && !rgValido(s.rg)) erros.push(`${rot}: RG inválido (\"${txt(s.rg)}\") — precisa do número completo.`);\n    const cpf = so(s.cpf); if (!cpfValido(cpf)) erros.push(`${rot}: CPF inválido (\"${txt(s.cpf)}\").`); else if (cpfs.has(cpf)) erros.push(`${rot}: CPF repetido em outro sócio.`); cpfs.add(cpf);\n    const nasc = dataBR(s.nascimento); if (!nasc) erros.push(`${rot}: data de nascimento inválida (\"${txt(s.nascimento)}\").`);\n    else if (idade(nasc, hoje) < 18) erros.push(`${rot}: menor de 18 anos — exige tratamento especial (emancipação/assistência).`);\n    const ec = estadoCivil(s, fem); if (!ec) erros.push(`${rot}: estado civil não reconhecido (\"${txt(s.estado_civil)}\").`);\n    if (/^(casad|uni)/i.test(txt(s.estado_civil)) && vazio(s.regime_bens)) erros.push(`${rot}: casado(a)/união estável sem regime de bens.`);\n    const e = s.endereco || {}; for (const k of ['logradouro', 'numero', 'bairro', 'cidade']) if (vazio(e[k])) erros.push(`${rot}: endereço residencial sem ${k}.`);\n    const cep = so(e.cep); if (cep.length !== 8) erros.push(`${rot}: CEP residencial inválido (\"${txt(e.cep)}\").`);\n    const uf = txt(e.uf).toUpperCase(); if (!UF_NOME[uf]) erros.push(`${rot}: UF residencial inválida (\"${txt(e.uf)}\").`);\n    const pct = tipo === 'SLU' ? 100 : Number(String(s.percentual).replace(',', '.'));\n    if (!(pct > 0 && pct <= 100)) erros.push(`${rot}: % de participação inválido (\"${txt(s.percentual)}\").`); else somaPct += pct;\n    let conselho = '';\n    if (!vazio(s.conselho)) { const m = txt(s.conselho).match(/^(.*?)[\\s:nº°-]*(\\d[\\d./-]*)$/i); conselho = m ? `, ${g(fem, 'inscrita', 'inscrito')} no ${m[1].trim()} sob o nº ${m[2]}` : `, ${g(fem, 'inscrita', 'inscrito')} no ${txt(s.conselho)}`; }\n    const rgTxt = `${txt(s.rg)} ${txt(s.rg_orgao).toUpperCase()}/${txt(s.rg_uf).toUpperCase()}`;\n    const qualif = [txt(s.nacionalidade).toLowerCase(), ec, 'maior', nasc ? `${g(fem, 'nascida', 'nascido')} em ${dd(nasc.d)}/${dd(nasc.m)}/${nasc.a}` : '', txt(s.profissao).toLowerCase()].join(', ')\n      + `, ${g(fem, 'portadora', 'portador')} da cédula de identidade RG nº ${rgTxt}, CPF nº ${fmtCPF(cpf)}${conselho}, ${g(fem, 'residente e domiciliada', 'residente e domiciliado')} na ${endereco(e)}, na Cidade de ${txt(e.cidade)}, Estado de ${UF_NOME[uf] || uf}, CEP ${fmtCEP(cep)}`;\n    return { fem, pct, rot, nome: txt(s.nome).toUpperCase(), titulo: tituloNome(s.nome), qualif, rg: rgTxt, adm: /^s/i.test(txt(s.administrador)) || tipo === 'SLU', pro: /^s/i.test(txt(s.pro_labore)) };\n  });\n  if (tipo === 'LTDA' && Math.abs(somaPct - 100) > 0.001) erros.push(`Soma das participações = ${somaPct}% (precisa dar 100%).`);\n  S.forEach((s) => { s.quotas = Math.round(capital * s.pct / 100); });\n  if (capital && S.length && S.reduce((a, s) => a + s.quotas, 0) !== capital) erros.push('Percentuais não dividem o capital em quotas inteiras de R$ 1,00 — conferir.');\n  if (S.length && !S.some((s) => s.adm)) erros.push('Nenhum sócio marcado como administrador.');\n  // Regra da Legalização (Redacted, 16/10/2026): em sociedade (2+ sócios), o sócio administrador é obrigado a retirar pró-labore\n  if (tipo === 'LTDA') S.filter((s) => s.adm && !s.pro).forEach((s) => erros.push(`${s.rot}: é administrador(a) e não marcou pró-labore — em sociedade, o administrador é obrigado a retirar pró-labore. Confirmar com o cliente.`));\n  if (S.some((s) => s.pro && !s.adm)) avisos.push('Sócio não administrador marcado com pró-labore — conferir.');\n  if (erros.length) return { erros, avisos, tipo };\n\n  const cidade = txt(sede.cidade), uf = UF_NOME[ufSede];\n  const comum = {\n    RAZAO_SOCIAL: txt(d.razao_social).toUpperCase(), SEDE_LOGRADOURO: `${txt(sede.logradouro)}, nº ${txt(sede.numero)}${txt(sede.complemento) ? ' – ' + txt(sede.complemento) : ''}`,\n    SEDE_BAIRRO: txt(sede.bairro), SEDE_CIDADE: cidade, SEDE_ESTADO: uf, SEDE_CEP: fmtCEP(cepSede),\n    CAPITAL: dinheiro(capital), CAPITAL_EXTENSO: reaisExtenso(capital), QUOTAS: milhar(capital), QUOTAS_EXTENSO: extenso(capital, true),\n    OBJETO_SOCIAL: txt(d.objeto_social), FORO_CIDADE: txt(d.foro_cidade) || cidade, FORO_ESTADO: txt(d.foro_estado) || uf,\n    LOCAL_DATA: `${cidade}, ${hoje.d} de ${MESES[hoje.m - 1]} de ${hoje.a}`,\n  };\n  const temPro = S.some((s) => s.adm && s.pro);\n  if (tipo === 'SLU') {\n    const s = S[0], f = s.fem;\n    Object.assign(comum, {\n      NOME: s.nome, NOME_TITULO: s.titulo, QUALIFICACAO: s.qualif, RG: s.rg,\n      PRO_LABORE_OPCAO: s.pro ? 'optou em fazer' : 'optou em não fazer',\n      T_DA_SOCIA: g(f, 'da sócia', 'do sócio'), T_A_SOCIA: g(f, 'a sócia', 'o sócio'), T_A_SOCIA_M: g(f, 'A sócia', 'O sócio'), T_PELA_SRA: g(f, 'pela Sra.', 'pelo Sr.'),\n      T_ADMINISTRADORA: g(f, 'administradora', 'administrador'), T_INTERDITADA: g(f, 'interditada', 'interditado'), T_IMPEDIDA: g(f, 'impedida', 'impedido'),\n    });\n    return { erros, avisos, tipo, campos: comum, socios: [] };\n  }\n  const adms = S.filter((s) => s.adm);\n  let administracao;\n  if (adms.length === S.length) administracao = S.length === 2 ? 'ambos os sócios, em conjunto ou isoladamente' : 'todos os sócios, em conjunto ou isoladamente';\n  else if (adms.length === 1) { administracao = `${adms[0].nome}, ${g(adms[0].fem, 'sócia administradora', 'sócio administrador')}`; avisos.push('Só 1 sócio administra: a cláusula de administração diz \"cabendo-lhes\" — Redacted conferir a concordância.'); }\n  else administracao = `os sócios ${adms.map((s) => s.nome).join(' e ')}, em conjunto ou isoladamente`;\n  Object.assign(comum, { ADMINISTRACAO: d.administracao_texto ? txt(d.administracao_texto) : administracao, PRO_LABORE_OPCAO: temPro ? 'fazer' : 'não fazer' });\n  const socLoop = S.map((s, i) => ({ N: String(i + 1), NOME: s.nome, QUALIFICACAO: s.qualif, QUOTAS_SOCIO: milhar(s.quotas), VALOR_SOCIO: dinheiro(s.quotas), RG: s.rg }));\n  return { erros, avisos, tipo, campos: comum, socios: socLoop };\n}\n\n\n// ===== execução no n8n =====\nconst d = $input.first().json;\nconst agora = $now.setZone('America/Sao_Paulo');\nconst r = montar(d, { d: agora.day, m: agora.month, a: agora.year });\nconst razao = txt(d.razao_social).toUpperCase();\nconst base = txt(d.nome_pasta) || (d.socios && d.socios[0] && txt(d.socios[0].nome)) || razao || 'SEM NOME';\nconst tipoNome = r.tipo === 'SLU' ? 'Ato Constitutivo' : 'Contrato Social';\nconst cfg = $('Config').first().json;\nconst aspas = (s) => String(s).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\");\nconst pastaNome = 'A CONSTITUIR - ' + base.toUpperCase();\nconst modeloBusca = r.tipo === 'SLU' ? 'Unipessoal' : '2 ou mais';\nreturn [{ json: {\n  q_pasta_existe: \"name='\" + aspas(pastaNome) + \"' and mimeType='application/vnd.google-apps.folder' and trashed=false and '\" + cfg.driveId + \"' in parents\",\n  q_nivel1: \"'\" + cfg.modeloPastaId + \"' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false\",\n  q_modelo: \"'\" + cfg.modelosContratoPastaId + \"' in parents and trashed=false and name contains '\" + modeloBusca + \"'\",\n  ok: r.erros.length === 0, erros: r.erros, avisos: r.avisos, tipo: r.tipo,\n  campos: r.campos || null, socios: r.socios || [],\n  pasta_nome: pastaNome,\n  razao_social: razao,\n  arquivo_nome: tipoNome + ' - ' + razao + ' (RASCUNHO DO ROBO - revisar).docx',\n  modelo_busca: modeloBusca,\n} }];\n"
+      }
+    },
+    {
+      "name": "Dados completos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Drive: pasta do cliente ja existe?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $('Conferir dados e montar campos').first().json.q_pasta_existe }}"
+            },
+            {
+              "name": "corpora",
+              "value": "drive"
+            },
+            {
+              "name": "driveId",
+              "value": "={{ $('Config').first().json.driveId }}"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name)"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Pasta ainda nao existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.files.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Modelo: subpastas nivel 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $('Conferir dados e montar campos').first().json.q_nivel1 }}"
+            },
+            {
+              "name": "corpora",
+              "value": "drive"
+            },
+            {
+              "name": "driveId",
+              "value": "={{ $('Config').first().json.driveId }}"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "pageSize",
+              "value": "1000"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,parents)"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Montar busca nivel 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Monta a busca das subpastas do próximo nível do modelo\nconst pastas = ($input.first().json.files || []);\nconst cfg = $('Config').first().json;\nconst q = pastas.length\n  ? '(' + pastas.map((p) => \"'\" + p.id + \"' in parents\").join(' or ') + \") and mimeType='application/vnd.google-apps.folder' and trashed=false\"\n  : \"'\" + cfg.modeloPastaId + \"' in parents and name='__nenhuma__' and trashed=false\";\nreturn [{ json: { q, pastas } }];"
+      }
+    },
+    {
+      "name": "Modelo: subpastas nivel 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "corpora",
+              "value": "drive"
+            },
+            {
+              "name": "driveId",
+              "value": "={{ $('Config').first().json.driveId }}"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "pageSize",
+              "value": "1000"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,parents)"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Montar busca nivel 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Monta a busca das subpastas do próximo nível do modelo\nconst pastas = ($input.first().json.files || []);\nconst cfg = $('Config').first().json;\nconst q = pastas.length\n  ? '(' + pastas.map((p) => \"'\" + p.id + \"' in parents\").join(' or ') + \") and mimeType='application/vnd.google-apps.folder' and trashed=false\"\n  : \"'\" + cfg.modeloPastaId + \"' in parents and name='__nenhuma__' and trashed=false\";\nreturn [{ json: { q, pastas } }];"
+      }
+    },
+    {
+      "name": "Modelo: subpastas nivel 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "corpora",
+              "value": "drive"
+            },
+            {
+              "name": "driveId",
+              "value": "={{ $('Config').first().json.driveId }}"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "pageSize",
+              "value": "1000"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,parents)"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Montar arvore do modelo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Junta os 3 níveis do \"1 PASTA MODELO\" numa lista de caminhos\nconst cfg = $('Config').first().json;\nconst n1 = $('Modelo: subpastas nivel 1').first().json.files || [];\nconst n2 = $('Modelo: subpastas nivel 2').first().json.files || [];\nconst n3 = $input.first().json.files || [];\nconst caminho = { [cfg.modeloPastaId]: '' };\nconst lista = [];\nfor (const nivel of [n1, n2, n3]) for (const f of nivel) {\n  const pai = (f.parents || []).find((p) => p in caminho);\n  const pc = pai === undefined ? (nivel === n1 ? '' : null) : caminho[pai];\n  if (pc === null) continue;\n  const c = (pc ? pc + '/' : '') + f.name; caminho[f.id] = c; lista.push({ caminho: c, pai: pc, nome: f.name });\n}\nfor (const c of ['Documentos Legais', 'Documentos Legais/Abertura']) if (!lista.some((x) => x.caminho === c)) { const i = c.lastIndexOf('/'); lista.push({ caminho: c, pai: i < 0 ? '' : c.slice(0, i), nome: c.slice(i + 1) }); }\nlista.sort((a, b) => a.caminho.split('/').length - b.caminho.split('/').length);\nreturn [{ json: { pastas: lista, total: lista.length + 1 } }];"
+      }
+    },
+    {
+      "name": "Drive: reservar IDs das pastas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files/generateIds",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "count",
+              "value": "={{ $json.total }}"
+            },
+            {
+              "name": "space",
+              "value": "drive"
+            },
+            {
+              "name": "type",
+              "value": "files"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Planejar pastas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Dá um ID reservado para cada pasta e liga cada uma ao pai certo.\n// Sai 1 item (a pasta principal) com o plano completo; os níveis 1 e 2 são criados depois, um nível de cada vez.\nconst cfg = $('Config').first().json;\nconst conf = $('Conferir dados e montar campos').first().json;\nconst lista = $('Montar arvore do modelo').first().json.pastas;\nconst ids = $input.first().json.ids;\nif (!ids || ids.length < lista.length + 1) throw new Error('Drive não reservou IDs suficientes');\nconst mapa = { '': ids[0] };\nconst plano = [];\nconst ignoradas = [];\nlista.forEach((p, i) => {\n  const nivel = p.caminho.split('/').length;\n  mapa[p.caminho] = ids[i + 1];\n  if (nivel > 2) { ignoradas.push(p.caminho); return; }\n  plano.push({ id: ids[i + 1], name: p.nome, parent: mapa[p.pai], caminho: p.caminho, nivel });\n});\nreturn [{ json: { id: ids[0], name: conf.pasta_nome, parent: cfg.driveId, caminho: '', nivel: 0, raiz_id: ids[0], abertura_id: mapa['Documentos Legais/Abertura'], plano, ignoradas } }];"
+      }
+    },
+    {
+      "name": "Achar modelo de contrato",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $('Conferir dados e montar campos').first().json.q_modelo }}"
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,mimeType)"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Baixar modelo de contrato",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ \"https://www.googleapis.com/drive/v3/files/\" + $json.files.find(f => f.name.toLowerCase().endsWith(\".docx\")).id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "alt",
+              "value": "media"
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Gerar contrato .docx",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ---------- INFLATE (descompactar o .docx normal salvo pelo Word, sem bibliotecas) ----------\nfunction inflateRaw(src) {\n  let pos = 0, bit = 0, bits = 0; const out = [];\n  const need = (n) => { while (bits < n) { if (pos >= src.length) throw new Error('docx corrompido'); bit |= src[pos++] << bits; bits += 8; } };\n  const get = (n) => { need(n); const v = bit & ((1 << n) - 1); bit >>>= n; bits -= n; return v; };\n  function tabela(lens) {\n    const cnt = new Array(16).fill(0); for (const l of lens) cnt[l]++; cnt[0] = 0;\n    const offs = new Array(16).fill(0); for (let i = 1; i < 16; i++) offs[i] = offs[i - 1] + cnt[i - 1];\n    const sym = new Array(lens.length); for (let i = 0; i < lens.length; i++) if (lens[i]) sym[offs[lens[i]]++] = i;\n    return { cnt, sym };\n  }\n  function decod(t) {\n    let code = 0, first = 0, idx = 0;\n    for (let len = 1; len < 16; len++) { code |= get(1); const c = t.cnt[len]; if (code - c < first) return t.sym[idx + (code - first)]; idx += c; first += c; first <<= 1; code <<= 1; }\n    throw new Error('docx corrompido (huffman)');\n  }\n  const LB = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258], LE = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];\n  const DB = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577], DE = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];\n  let fixL = null, fixD = null; let fim = 0;\n  while (!fim) {\n    fim = get(1); const tipo = get(2);\n    if (tipo === 0) { bit = 0; bits = 0; const len = src[pos] | (src[pos + 1] << 8); pos += 4; for (let i = 0; i < len; i++) out.push(src[pos++]); continue; }\n    let lt, dt;\n    if (tipo === 1) {\n      if (!fixL) { const l = []; for (let i = 0; i < 288; i++) l.push(i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8); fixL = tabela(l); fixD = tabela(new Array(30).fill(5)); }\n      lt = fixL; dt = fixD;\n    } else if (tipo === 2) {\n      const hl = get(5) + 257, hd = get(5) + 1, hc = get(4) + 4, ORD = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];\n      const cl = new Array(19).fill(0); for (let i = 0; i < hc; i++) cl[ORD[i]] = get(3);\n      const ct = tabela(cl), lens = [];\n      while (lens.length < hl + hd) {\n        const s = decod(ct);\n        if (s < 16) lens.push(s);\n        else if (s === 16) { const p = lens[lens.length - 1], r = 3 + get(2); for (let i = 0; i < r; i++) lens.push(p); }\n        else if (s === 17) { const r = 3 + get(3); for (let i = 0; i < r; i++) lens.push(0); }\n        else { const r = 11 + get(7); for (let i = 0; i < r; i++) lens.push(0); }\n      }\n      lt = tabela(lens.slice(0, hl)); dt = tabela(lens.slice(hl));\n    } else throw new Error('docx corrompido (bloco)');\n    for (;;) {\n      const s = decod(lt);\n      if (s < 256) out.push(s);\n      else if (s === 256) break;\n      else { const k = s - 257, len = LB[k] + get(LE[k]), d = decod(dt), dist = DB[d] + get(DE[d]); const ini = out.length - dist; for (let i = 0; i < len; i++) out.push(out[ini + i]); }\n    }\n  }\n  return Buffer.from(out);\n}\n\n// ---------- ZIP (lê .docx comprimido ou não; grava sem compressão) ----------\nconst CRC_TABLE = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();\nfunction crc32(buf) { let c = 0xFFFFFFFF; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }\n\nfunction lerZip(buf) {\n  let eocd = -1;\n  for (let i = buf.length - 22; i >= 0; i--) if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }\n  if (eocd < 0) throw new Error('Modelo não é um .docx válido');\n  const total = buf.readUInt16LE(eocd + 10); let p = buf.readUInt32LE(eocd + 16);\n  const arquivos = [];\n  for (let k = 0; k < total; k++) {\n    const metodo = buf.readUInt16LE(p + 10), tam = buf.readUInt32LE(p + 20);\n    const nLen = buf.readUInt16LE(p + 28), xLen = buf.readUInt16LE(p + 30), cLen = buf.readUInt16LE(p + 32);\n    const local = buf.readUInt32LE(p + 42); const nome = buf.toString('utf8', p + 46, p + 46 + nLen);\n    const ini = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);\n    const bruto = buf.subarray(ini, ini + tam);\n    let dados;\n    if (metodo === 0) dados = Buffer.from(bruto);\n    else if (metodo === 8) dados = inflateRaw(bruto);\n    else throw new Error('Compressão não suportada no modelo (arquivo: ' + nome + ')');\n    if (dados.length !== buf.readUInt32LE(p + 24)) throw new Error('Tamanho errado ao abrir ' + nome);\n    arquivos.push({ nome, dados });\n    p += 46 + nLen + xLen + cLen;\n  }\n  return arquivos;\n}\n\nfunction gravarZip(arquivos) {\n  const partes = [], central = []; let off = 0;\n  for (const a of arquivos) {\n    const nome = Buffer.from(a.nome, 'utf8'), crc = crc32(a.dados), n = a.dados.length;\n    const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(0x0800, 6); h.writeUInt16LE(0, 8);\n    h.writeUInt16LE(0, 10); h.writeUInt16LE(0x21, 12); h.writeUInt32LE(crc, 14); h.writeUInt32LE(n, 18); h.writeUInt32LE(n, 22); h.writeUInt16LE(nome.length, 26); h.writeUInt16LE(0, 28);\n    partes.push(h, nome, a.dados);\n    const c = Buffer.alloc(46); c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(0x0800, 8); c.writeUInt16LE(0, 10);\n    c.writeUInt16LE(0, 12); c.writeUInt16LE(0x21, 14); c.writeUInt32LE(crc, 16); c.writeUInt32LE(n, 20); c.writeUInt32LE(n, 24); c.writeUInt16LE(nome.length, 28); c.writeUInt32LE(off, 42);\n    central.push(c, nome);\n    off += 30 + nome.length + n;\n  }\n  const cd = Buffer.concat(central); const e = Buffer.alloc(22);\n  e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(arquivos.length, 8); e.writeUInt16LE(arquivos.length, 10); e.writeUInt32LE(cd.length, 12); e.writeUInt32LE(off, 16);\n  return Buffer.concat([...partes, cd, e]);\n}\n\n// ---------- Preencher o document.xml ----------\nconst escXml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nfunction trocar(xml, campos) { return xml.replace(/\\{([A-Z_]+)\\}/g, (m, k) => (k in campos ? escXml(campos[k]) : m)); }\nfunction preencherXml(xml, r) {\n  const paras = xml.match(/<w:p[ >][\\s\\S]*?<\\/w:p>|<w:p\\/>/g) || [];\n  const textoP = (p) => p.replace(/<[^>]+>/g, '');\n  let out = xml;\n  // loops {#SOCIOS} ... {/SOCIOS}: repete os parágrafos do meio para cada sócio\n  for (;;) {\n    const iIni = paras.findIndex((p) => textoP(p).includes('{#SOCIOS}'));\n    if (iIni < 0) break;\n    const iFim = paras.findIndex((p, j) => j > iIni && textoP(p).includes('{/SOCIOS}'));\n    if (iFim < 0) throw new Error('Modelo com {#SOCIOS} sem {/SOCIOS}');\n    const bloco = paras.slice(iIni + 1, iFim).join('');\n    const original = paras.slice(iIni, iFim + 1).join('');\n    const repetido = r.socios.map((s) => trocar(bloco, s)).join('');\n    if (!out.includes(original)) throw new Error('Não achei o trecho do loop no modelo');\n    out = out.replace(original, () => repetido);\n    paras.splice(iIni, iFim - iIni + 1);\n  }\n  out = trocar(out, r.campos);\n  const sobrou = (textoP(out).match(/\\{[#/]?[A-Z_]+\\}/g) || []);\n  if (sobrou.length) throw new Error('Marcações não preenchidas: ' + [...new Set(sobrou)].join(' '));\n  return out;\n}\n\nfunction gerarDocx(modeloBuf, r) {\n  const arqs = lerZip(modeloBuf);\n  const doc = arqs.find((a) => a.nome === 'word/document.xml');\n  doc.dados = Buffer.from(preencherXml(doc.dados.toString('utf8'), r), 'utf8');\n  return gravarZip(arqs);\n}\n\n// ===== execução no n8n =====\nconst r = $('Conferir dados e montar campos').first().json;\nconst modelo = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst docx = gerarDocx(modelo, r);\nreturn [{ json: { arquivo_nome: r.arquivo_nome, bytes: docx.length },\n  binary: { data: { data: docx.toString('base64'), mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: r.arquivo_nome, fileExtension: 'docx' } } }];\n"
+      }
+    },
+    {
+      "name": "Salvar contrato em Documentos Legais/Abertura",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        5280,
+        100
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ $json.arquivo_nome.replace('(RASCUNHO DO ROBO - revisar)', '(gerado pelo robô - conferir)') }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<DRIVEID>"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<FOLDERID>"
+        },
+        "options": {
+          "simplifyOutput": false
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Resultado (evidencia)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5500,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1",
+              "name": "resultado",
+              "value": "Contrato gerado (Redacted confere)",
+              "type": "string"
+            },
+            {
+              "id": "e2",
+              "name": "pasta",
+              "value": "={{ $('Conferir dados e montar campos').first().json.pasta_nome }}",
+              "type": "string"
+            },
+            {
+              "id": "e3",
+              "name": "link_pasta",
+              "value": "={{ '<GOOGLE_URL>' + $('Planejar pastas').first().json.raiz_id }}",
+              "type": "string"
+            },
+            {
+              "id": "e4",
+              "name": "link_contrato",
+              "value": "={{ $json.webViewLink }}",
+              "type": "string"
+            },
+            {
+              "id": "e5",
+              "name": "pastas_criadas",
+              "value": "={{ $('Conferir pastas criadas').first().json.criadas }}",
+              "type": "number"
+            },
+            {
+              "id": "e6",
+              "name": "avisos",
+              "value": "={{ [...($('Converter resposta do formulario').first().json.avisos_entrada || []), ...$('Conferir dados e montar campos').first().json.avisos, ...($('Conferir pastas criadas').first().json.ignoradas.length ? ['Subpastas de 3º nível do modelo não copiadas: ' + $('Conferir pastas criadas').first().json.ignoradas.join(', ')] : [])].join(' | ') || 'nenhum' }}",
+              "type": "string"
+            },
+            {
+              "id": "e7",
+              "name": "quando",
+              "value": "={{ $now.setZone('America/Sao_Paulo').toFormat('dd/MM/yyyy HH:mm') }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Pasta ja existia (nada foi criado)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1540,
+        400
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "j1",
+              "name": "resultado",
+              "value": "={{ 'Já existe a pasta ' + $('Conferir dados e montar campos').first().json.pasta_nome + ' — o robô não cria de novo. Link: <GOOGLE_URL>' + $json.files[0].id }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Problemas para corrigir (nada foi criado)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        500
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "resultado",
+              "value": "={{ \"Contrato NÃO gerado. Corrigir:\\n- \" + $json.erros.join(\"\\n- \") }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Drive: criar pasta principal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "fields",
+              "value": "id,name"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.id, name: $json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$json.parent] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Preparar subpastas nivel 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Confere a criação anterior (aceita 200 = criada, 409 = já existia com esse ID) e solta as pastas do nível 1\nfor (const it of $input.all()) { const c = it.json.statusCode; if (c !== 200 && c !== 409) throw new Error('Drive recusou criar pasta (' + c + '): ' + JSON.stringify(it.json.body).slice(0, 300)); }\nreturn $('Planejar pastas').first().json.plano.filter((p) => p.nivel === 1).map((p) => ({ json: p }));"
+      }
+    },
+    {
+      "name": "Drive: criar subpastas nivel 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "fields",
+              "value": "id,name"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.id, name: $json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$json.parent] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 700
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Preparar subpastas nivel 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Confere o nível 1 e solta as pastas do nível 2\nfor (const it of $input.all()) { const c = it.json.statusCode; if (c !== 200 && c !== 409) throw new Error('Drive recusou criar pasta (' + c + '): ' + JSON.stringify(it.json.body).slice(0, 300)); }\nreturn $('Planejar pastas').first().json.plano.filter((p) => p.nivel === 2).map((p) => ({ json: p }));"
+      }
+    },
+    {
+      "name": "Drive: criar subpastas nivel 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "supportsAllDrives",
+              "value": "true"
+            },
+            {
+              "name": "fields",
+              "value": "id,name"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.id, name: $json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$json.parent] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 700
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Conferir pastas criadas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Confere o nível 2 e resume o que foi criado\nfor (const it of $input.all()) { const c = it.json.statusCode; if (c !== 200 && c !== 409) throw new Error('Drive recusou criar pasta (' + c + '): ' + JSON.stringify(it.json.body).slice(0, 300)); }\nconst p = $('Planejar pastas').first().json;\nreturn [{ json: { criadas: p.plano.length + 1, ignoradas: p.ignoradas } }];"
+      }
+    },
+    {
+      "name": "A cada 10 min (respostas novas)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "E teste manual?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        330,
+        450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Teste manual (dados ficticios)').isExecuted }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "name": "Respostas ja processadas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<DATATABLEID>"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "name": "Buscar respostas do formulario",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        600
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://forms.googleapis.com/v1/forms/' + $('Config').first().json.formId + '/responses' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter",
+              "value": "={{ 'timestamp > ' + $('Config').first().json.respostas_a_partir_de }}"
+            },
+            {
+              "name": "pageSize",
+              "value": "5000"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleDriveOAuth2Api"
+        }
+      }
+    },
+    {
+      "name": "Proxima resposta nova",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Pega a resposta mais antiga que ainda não foi processada (1 por execução; as outras ficam para os próximos 10 min).\n// Chave = id da resposta + horário do envio: se o cliente reenviar/editar, processa de novo.\nconst feitos = new Set($('Respostas ja processadas').all().map((i) => i.json.resposta_id).filter(Boolean));\nconst lista = ($('Buscar respostas do formulario').first().json.responses || [])\n  .map((r) => ({ ...r, chave: r.responseId + '@' + r.lastSubmittedTime }))\n  .filter((r) => !feitos.has(r.chave))\n  .sort((a, b) => a.lastSubmittedTime.localeCompare(b.lastSubmittedTime));\nif (!lista.length) return [];\nconst r = lista[0];\nreturn [{ json: { resposta_id: r.chave, enviada_em: r.lastSubmittedTime, answers: r.answers || {}, na_fila: lista.length } }];"
+      }
+    },
+    {
+      "name": "Converter resposta do formulario",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Converte uma resposta do Google Form (API) para o formato que a conferência usa.\n// Dados fictícios do teste manual que já vêm no formato do robô passam direto.\nconst it = $input.first().json;\nif (!it.answers) return [{ json: { ...it, avisos_entrada: [] } }];\nconst A = it.answers;\nconst v = (q) => { const a = A[q]; return a && a.textAnswers ? a.textAnswers.answers.map((x) => x.value).join(', ').trim() : ''; };\nconst avisos = [];\nfunction cidadeUf(c, rot) {\n  const m = c.match(/^(.*?)\\s*[\\/-]\\s*([A-Za-z]{2})$/);\n  if (m) return { cidade: m[1].trim(), uf: m[2].toUpperCase() };\n  if (c) avisos.push(`${rot}: o formulário não pergunta o estado (UF) — assumido SP.`);\n  return { cidade: c, uf: 'SP' };\n}\n// códigos fixos das perguntas do formulário (não mudam se alguém editar o título)\nconst E = { natureza: '447da805', razao: '6cd2d53c', rua: '3d67d972', num: '2832979d', compl: '08dc3921', bairro: '2e7eeb8a', cidade: '15e25a1d', cep: '70d7e2ec', capital: '6d418f4c', integ: '6e62bf22', atividades: '60b2bc0c' };\nconst SOC = [\n  { nome: '58b7f00d', genero: '01a95af8', nac: '4cb94ea3', nasc: '4525cd76', ec: '2c08ead7', regime: '66209d0d', prof: '76e77b9a', conselho: '7875db39', rg: '7d75efbd', orgao: '6f74ad36', uf: '7a2c599b', cpf: '1520aeb5', rua: '41548d88', num: '138ea2a9', compl: '1fab4837', bairro: '56416b09', cidade: '5838a9fa', cep: '7ef5a9df', tel: '52eb34b3', email: '2f691231', pct: '4f10b735', adm: '34a515e3', proSN: '7a476071' },\n  { nome: '39baf566', genero: '10f46026', nac: '63025b26', nasc: '3fa927e7', ec: '14cd1237', regime: '2792d483', prof: '4a25278e', conselho: '2599ab28', rg: '2033da68', orgao: '35debe33', uf: '537d7f44', cpf: '0c56b27d', rua: '6086d606', num: '24bd2fdc', compl: '1c32429d', bairro: '067d3ec3', cidade: '190c4d97', cep: '27fa24ba', tel: '33f9291d', email: '09d391b3', pct: '4e94dcf6', adm: '5c35732c', proSN: '1165e7b0' },\n  { nome: '0099ef8b', genero: '435d8e1c', nac: '3c154cb3', nasc: '0f369613', ec: '4fcc5198', regime: '2c3c026e', prof: '6a7b53b4', conselho: '62d1fa40', rg: '400f7a1f', orgao: '5599c09c', uf: '18f2c0bc', cpf: '625e8144', rua: '3fa703a7', num: '5d71601b', compl: '5f9fd898', bairro: '173ac175', cidade: '7fadd6aa', cep: '3193e931', tel: '2d49c42d', email: '7ab7512f', pct: '682f4e00', adm: '05c4b048', proSN: '18534eba' },\n];\nconst nat = v(E.natureza);\nconst tipo = /individual/i.test(nat) ? 'EI' : /unipessoal/i.test(nat) ? 'SLU' : /2 ou mais/i.test(nat) ? 'LTDA' : '';\nconst sedeCU = cidadeUf(v(E.cidade), 'Empresa');\nconst socios = SOC.filter((s) => v(s.nome)).map((s, i) => {\n  const cu = cidadeUf(v(s.cidade), `Sócio ${i + 1}`);\n  return {\n    nome: v(s.nome), genero: v(s.genero), nacionalidade: v(s.nac), estado_civil: v(s.ec), regime_bens: v(s.regime), nascimento: v(s.nasc),\n    profissao: v(s.prof), conselho: v(s.conselho), rg: v(s.rg), rg_orgao: v(s.orgao), rg_uf: v(s.uf), cpf: v(s.cpf),\n    endereco: { logradouro: v(s.rua), numero: v(s.num), complemento: v(s.compl), bairro: v(s.bairro), cidade: cu.cidade, uf: cu.uf, cep: v(s.cep) },\n    percentual: v(s.pct), administrador: v(s.adm), pro_labore: v(s.proSN), email: v(s.email), telefone: v(s.tel),\n  };\n});\nconst atividades = v(E.atividades);\nif (atividades) avisos.push('Objeto social copiado das atividades descritas pelo cliente — Redacted ajustar o texto.');\nreturn [{ json: {\n  resposta_id: it.resposta_id, enviada_em: it.enviada_em,\n  nome_pasta: it.nome_pasta || (socios[0] ? socios[0].nome : v(E.razao)),\n  tipo, razao_social: v(E.razao), capital: v(E.capital), integralizacao: v(E.integ), objeto_social: atividades.toUpperCase(),\n  sede: { logradouro: v(E.rua), numero: v(E.num), complemento: v(E.compl), bairro: v(E.bairro), cidade: sedeCU.cidade, uf: sedeCU.uf, cep: v(E.cep) },\n  socios, avisos_entrada: avisos,\n} }];"
+      }
+    },
+    {
+      "name": "Preparar registro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5720,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Uma linha na tabela \"Abertura de Empresas - respostas processadas\" por resposta (evidência + não processar 2x)\nconst conv = $('Converter resposta do formulario').first().json;\nconst conf = $('Conferir dados e montar campos').first().json;\nlet situacao, detalhe, link_pasta = '', link_contrato = '';\nif ($('Resultado (evidencia)').isExecuted) {\n  const r = $('Resultado (evidencia)').first().json;\n  situacao = 'CONTRATO GERADO'; detalhe = 'Avisos: ' + r.avisos; link_pasta = r.link_pasta; link_contrato = r.link_contrato;\n} else if ($('Pasta ja existia (nada foi criado)').isExecuted) {\n  situacao = 'PASTA JA EXISTIA'; detalhe = $('Pasta ja existia (nada foi criado)').first().json.resultado;\n} else {\n  situacao = 'CORRIGIR DADOS'; detalhe = $('Problemas para corrigir (nada foi criado)').first().json.resultado;\n}\nreturn [{ json: { resposta_id: conv.resposta_id || ('TESTE-MANUAL ' + $now.toISO()), enviada_em: conv.enviada_em || '', cliente: conf.pasta_nome, situacao, detalhe, link_pasta, link_contrato } }];"
+      }
+    },
+    {
+      "name": "Registrar na tabela",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5940,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "<DATATABLEID>"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "matchingColumns": [],
+          "schema": []
+        }
+      }
+    },
+    {
+      "name": "Montar aviso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Mensagem para a Redacted no Google Chat\nconst r = $('Preparar registro').first().json;\nconst conv = $('Converter resposta do formulario').first().json;\nconst nomes = { SLU: 'Sociedade Limitada Unipessoal', LTDA: 'Sociedade Limitada', EI: 'Empresário Individual' };\nconst cliente = r.cliente.replace(/^A CONSTITUIR - /, '');\nconst quando = r.enviada_em ? DateTime.fromISO(r.enviada_em).setZone('America/Sao_Paulo').toFormat('dd/MM HH:mm') : '';\nconst teste = /^TESTE/.test(r.resposta_id) ? '[TESTE] ' : '';\nlet t;\nif (r.situacao === 'CONTRATO GERADO') {\n  const av = r.detalhe.replace(/^Avisos: /, '');\n  t = `${teste}🏢 *Abertura de empresa — contrato pronto para conferência*\\n*Cliente:* ${cliente}${quando ? ' (formulário enviado em ' + quando + ')' : ''}\\n*Natureza:* ${nomes[conv.tipo] || conv.tipo}\\n\\n📄 Contrato: ${r.link_contrato}\\n📁 Pasta: ${r.link_pasta}`;\n  if (av && av !== 'nenhum') t += '\\n\\n⚠️ *Conferir:*\\n• ' + av.split(' | ').join('\\n• ');\n  t += '\\n\\nConfira o contrato antes de seguir com o registro.';\n} else if (r.situacao === 'CORRIGIR DADOS') {\n  t = `${teste}⚠️ *Abertura de empresa — dados para corrigir*\\n*Cliente:* ${cliente}${quando ? ' (formulário enviado em ' + quando + ')' : ''}\\n\\nO robô *não* gerou o contrato nem criou pasta. Corrigir com o cliente:\\n• ` + r.detalhe.replace(/^Contrato NÃO gerado\\. Corrigir:\\n- /, '').split('\\n- ').join('\\n• ') + '\\n\\nDepois de corrigido, o cliente pode enviar o formulário de novo.';\n} else {\n  t = `${teste}ℹ️ *Abertura de empresa*\\n${r.detalhe}`;\n}\nreturn [{ json: { space: $('Config').first().json.chat_destino, text: t } }];"
+      }
+    },
+    {
+      "name": "Avisar no Google Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6380,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://chat.googleapis.com/v1/' + $json.space + '/messages' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleChatOAuth2Api",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.text }) }}"
+      },
+      "credentials": {
+        "googleChatOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "googleChatOAuth2Api"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Teste manual (dados ficticios)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir dados e montar campos": {
+      "main": [
+        [
+          {
+            "node": "Dados completos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dados completos?": {
+      "main": [
+        [
+          {
+            "node": "Drive: pasta do cliente ja existe?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Problemas para corrigir (nada foi criado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: pasta do cliente ja existe?": {
+      "main": [
+        [
+          {
+            "node": "Pasta ainda nao existe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pasta ainda nao existe?": {
+      "main": [
+        [
+          {
+            "node": "Modelo: subpastas nivel 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pasta ja existia (nada foi criado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo: subpastas nivel 1": {
+      "main": [
+        [
+          {
+            "node": "Montar busca nivel 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar busca nivel 2": {
+      "main": [
+        [
+          {
+            "node": "Modelo: subpastas nivel 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo: subpastas nivel 2": {
+      "main": [
+        [
+          {
+            "node": "Montar busca nivel 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar busca nivel 3": {
+      "main": [
+        [
+          {
+            "node": "Modelo: subpastas nivel 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo: subpastas nivel 3": {
+      "main": [
+        [
+          {
+            "node": "Montar arvore do modelo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar arvore do modelo": {
+      "main": [
+        [
+          {
+            "node": "Drive: reservar IDs das pastas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: reservar IDs das pastas": {
+      "main": [
+        [
+          {
+            "node": "Planejar pastas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Achar modelo de contrato": {
+      "main": [
+        [
+          {
+            "node": "Baixar modelo de contrato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar modelo de contrato": {
+      "main": [
+        [
+          {
+            "node": "Gerar contrato .docx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar contrato .docx": {
+      "main": [
+        [
+          {
+            "node": "Salvar contrato em Documentos Legais/Abertura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar contrato em Documentos Legais/Abertura": {
+      "main": [
+        [
+          {
+            "node": "Resultado (evidencia)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Planejar pastas": {
+      "main": [
+        [
+          {
+            "node": "Drive: criar pasta principal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: criar pasta principal": {
+      "main": [
+        [
+          {
+            "node": "Preparar subpastas nivel 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar subpastas nivel 1": {
+      "main": [
+        [
+          {
+            "node": "Drive: criar subpastas nivel 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: criar subpastas nivel 1": {
+      "main": [
+        [
+          {
+            "node": "Preparar subpastas nivel 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar subpastas nivel 2": {
+      "main": [
+        [
+          {
+            "node": "Drive: criar subpastas nivel 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: criar subpastas nivel 2": {
+      "main": [
+        [
+          {
+            "node": "Conferir pastas criadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir pastas criadas": {
+      "main": [
+        [
+          {
+            "node": "Achar modelo de contrato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada 10 min (respostas novas)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "E teste manual?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E teste manual?": {
+      "main": [
+        [
+          {
+            "node": "Dados da abertura (TESTE ficticio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respostas ja processadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respostas ja processadas": {
+      "main": [
+        [
+          {
+            "node": "Buscar respostas do formulario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar respostas do formulario": {
+      "main": [
+        [
+          {
+            "node": "Proxima resposta nova",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proxima resposta nova": {
+      "main": [
+        [
+          {
+            "node": "Converter resposta do formulario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dados da abertura (TESTE ficticio)": {
+      "main": [
+        [
+          {
+            "node": "Converter resposta do formulario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converter resposta do formulario": {
+      "main": [
+        [
+          {
+            "node": "Conferir dados e montar campos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado (evidencia)": {
+      "main": [
+        [
+          {
+            "node": "Preparar registro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pasta ja existia (nada foi criado)": {
+      "main": [
+        [
+          {
+            "node": "Preparar registro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Problemas para corrigir (nada foi criado)": {
+      "main": [
+        [
+          {
+            "node": "Preparar registro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar registro": {
+      "main": [
+        [
+          {
+            "node": "Registrar na tabela",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar na tabela": {
+      "main": [
+        [
+          {
+            "node": "Montar aviso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar aviso": {
+      "main": [
+        [
+          {
+            "node": "Avisar no Google Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
